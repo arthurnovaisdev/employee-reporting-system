@@ -52,7 +52,7 @@ public class Report {
 
 
     @PrePersist
-    protected void onCreated() {
+    protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         this.status = ReportStatus.RECEIVED;

@@ -1,6 +1,5 @@
 package com.mbfreire.employee_reporting.entity;
 
-import com.mbfreire.employee_reporting.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -8,33 +7,27 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users")
+@Table(name = "attachments")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class Attachment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
-    private String name;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "report_id", nullable = false)
+    private Report report;
 
-    @Column(nullable = false, unique = true)
-    private String email;
+    @Column(name = "file_name", nullable = false)
+    private String fileName;
 
-    @Column(name = "password_hash", nullable = false)
-    private String passwordHash;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Role role;
-
-    @Column(nullable = false)
-    private boolean active;
+    @Column(name = "file_path", nullable = false)
+    private String filePath;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -42,8 +35,5 @@ public class User {
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
-        this.active = true;
     }
-
-
 }
