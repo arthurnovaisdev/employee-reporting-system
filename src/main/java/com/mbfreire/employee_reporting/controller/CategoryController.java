@@ -5,6 +5,8 @@ import com.mbfreire.employee_reporting.dto.response.CategoryResponseDTO;
 import com.mbfreire.employee_reporting.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +27,7 @@ public class CategoryController {
     }
 
     @GetMapping
-    public ResponseEntity<List<CategoryResponseDTO>> findAll() {
-        return ResponseEntity.ok(categoryService.findAll());
+    public ResponseEntity<Page<CategoryResponseDTO>> findAll(Pageable pageable) {
+        return ResponseEntity.ok(categoryService.findAll(pageable));
     }
 }

@@ -5,6 +5,8 @@ import com.mbfreire.employee_reporting.dto.response.CategoryResponseDTO;
 import com.mbfreire.employee_reporting.entity.Category;
 import com.mbfreire.employee_reporting.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,9 +30,8 @@ public class CategoryService {
         return new CategoryResponseDTO(category.getId(), category.getName(), category.isActive());
     }
 
-    public List<CategoryResponseDTO> findAll() {
-        return categoryRepository.findAll().stream()
-                .map(cat -> new CategoryResponseDTO(cat.getId(), cat.getName(), cat.isActive()))
-                .toList();
+    public Page<CategoryResponseDTO> findAll(Pageable pageable) {
+        return categoryRepository.findAll(pageable)
+                .map(cat -> new CategoryResponseDTO(cat.getId(), cat.getName(), cat.isActive()));
     }
 }
