@@ -1,9 +1,13 @@
 package com.mbfreire.employee_reporting.service;
 
+import com.mbfreire.employee_reporting.dto.response.UserResponseDTO;
 import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,13 +19,6 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    @Transactional
-    public User registerUser(User user, String rawPassword) {
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        return userRepository.save(user);
-    }
 
     public User findById(UUID id) {
         return userRepository.findById(id)
@@ -31,5 +28,23 @@ public class UserService {
     public User findByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("E-mail não encontrado."));
+    }
+
+    public Page<UserResponseDTO> findAll(Pageable pageable) {
+        return userRepository.findAll(pageable)
+                .map(user -> new UserResponseDTO(
+                        user.getId(),
+                        user.getName(),
+                        user.getEmail(),
+                        user.getRole().name(),
+                        user.isActive()
+                ));
+    }
+
+    @Transactional
+    public void toglleActiveStatus(UUID id, boolean active) {
+        User user = findById(id);
+        user.setActive(active);
+        userRepository.save(user);
     }
 }
