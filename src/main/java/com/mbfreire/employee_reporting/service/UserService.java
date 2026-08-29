@@ -1,6 +1,5 @@
 package com.mbfreire.employee_reporting.service;
 
-import com.mbfreire.employee_reporting.dto.response.UserResponseDTO;
 import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.UserRepository;
@@ -8,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,19 +28,12 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("E-mail não encontrado."));
     }
 
-    public Page<UserResponseDTO> findAll(Pageable pageable) {
-        return userRepository.findAll(pageable)
-                .map(user -> new UserResponseDTO(
-                        user.getId(),
-                        user.getName(),
-                        user.getEmail(),
-                        user.getRole().name(),
-                        user.isActive()
-                ));
+    public Page<User> listPaged(Pageable pageable) {
+        return userRepository.findAll(pageable);
     }
 
     @Transactional
-    public void toglleActiveStatus(UUID id, boolean active) {
+    public void setActiveStatus(UUID id, boolean active) {
         User user = findById(id);
         user.setActive(active);
         userRepository.save(user);
