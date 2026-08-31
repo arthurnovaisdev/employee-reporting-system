@@ -34,10 +34,16 @@ public class UserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<UserResponseDTO> findById(@PathVariable UUID id) {
+        return ResponseEntity.ok(toDTO(userService.findById(id)));
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public ResponseEntity<Void> deactivate(@PathVariable UUID id) {
+        userService.setActiveStatus(id, false);
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{id}/status")
+    @PatchMapping("/{id}/activate")
     public ResponseEntity<Void> activate(@PathVariable UUID id) {
         userService.setActiveStatus(id, true);
         return ResponseEntity.noContent().build();
