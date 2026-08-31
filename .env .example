@@ -1,0 +1,5 @@
+POSTGRES_DB=employee_reporting
+POSTGRES_USER=seu_usuario_aqui
+POSTGRES_PASSWORD=sua_senha_aqui
+
+JWT_SECRET=sua_chave_jwt_super_secreta_aqui
