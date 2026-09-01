@@ -3,9 +3,13 @@ package com.mbfreire.employee_reporting.controller;
 import com.mbfreire.employee_reporting.dto.request.ReportRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.ProtocolResponseDTO;
 import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
+import com.mbfreire.employee_reporting.enums.ReportStatus;
 import com.mbfreire.employee_reporting.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,5 +33,22 @@ public class ReportController {
             @RequestParam String code
     ) {
         return ResponseEntity.ok(reportService.consult(protocol, code));
+    }
+
+    @GetMapping("/admin")
+    public ResponseEntity<Page<ReportResponseDTO>> listAll(
+            @PageableDefault(page = 0, size = 10, sort = "createdAt") Pageable pageable
+            ) {
+        Page<ReportResponseDTO> reports = reportService.findAll(pageable);
+        return ResponseEntity.ok(reports);
+    }
+
+    @PatchMapping("/admin/{protocol}/status")
+    public ResponseEntity<ReportResponseDTO> updateStatus(
+            @PathVariable String protocol,
+            @RequestParam ReportStatus status
+            ) {
+        ReportResponseDTO response = reportService.updateStatus(protocol, status);
+        return ResponseEntity.ok(response);
     }
 }

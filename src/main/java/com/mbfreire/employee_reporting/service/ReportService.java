@@ -5,10 +5,13 @@ import com.mbfreire.employee_reporting.dto.response.ProtocolResponseDTO;
 import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
 import com.mbfreire.employee_reporting.entity.Category;
 import com.mbfreire.employee_reporting.entity.Report;
+import com.mbfreire.employee_reporting.enums.ReportStatus;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.CategoryRepository;
 import com.mbfreire.employee_reporting.repository.ReportRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +56,34 @@ public class ReportService {
         if (!passwordEncoder.matches(code, report.getAccessCodeHash())) {
             throw new ResourceNotFoundException("Protocolo ou código de acesso inválido.");
         }
+
+        return new ReportResponseDTO(
+                report.getProtocol(),
+                report.getCategory().getName(),
+                report.getDescription(),
+                report.getStatus(),
+                report.getCreatedAt()
+        );
+    }
+
+    public Page<ReportResponseDTO> findAll(Pageable pageable) {
+        return reportRepository.findAll(pageable)
+                .map(report -> new ReportResponseDTO(
+                        report.getProtocol(),
+                        report.getCategory().getName(),
+                        report.getDescription(),
+                        report.getStatus(),
+                        report.getCreatedAt()
+                ));
+    }
+
+    @Transactional
+    public ReportResponseDTO updateStatus(String protocol, ReportStatus newStatus) {
+        Report report = reportRepository.findByProtocol(protocol)
+                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
+
+        report.setStatus(newStatus);
+        reportRepository.save(report);
 
         return new ReportResponseDTO(
                 report.getProtocol(),
