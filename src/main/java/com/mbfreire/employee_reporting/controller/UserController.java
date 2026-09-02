@@ -1,9 +1,11 @@
 package com.mbfreire.employee_reporting.controller;
 
+import com.mbfreire.employee_reporting.dto.request.ChangePasswordRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.UserResponseDTO;
 import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.security.UserDetailsImpl;
 import com.mbfreire.employee_reporting.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +37,15 @@ public class UserController {
     @GetMapping("/{id}")
     public ResponseEntity<UserResponseDTO> findById(@PathVariable UUID id) {
         return ResponseEntity.ok(toDTO(userService.findById(id)));
+    }
+
+    @PatchMapping("/me/password")
+    public ResponseEntity<Void> changePassword(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @Valid @RequestBody ChangePasswordRequestDTO dto
+            ) {
+        userService.ChangePassword(principal.getUser().getId(), dto);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/deactivate")
