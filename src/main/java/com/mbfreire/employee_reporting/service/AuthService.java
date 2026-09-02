@@ -27,28 +27,29 @@ public class AuthService {
 
     public LoginResponseDTO login(LoginRequestDTO dto) {
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(dto.email(),dto.password())
+                new UsernamePasswordAuthenticationToken(dto.cpf(),dto.password())
         );
 
-        User user = userRepository.findByEmail(dto.email())
+        User user = userRepository.findByCpf(dto.cpf())
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado."));
 
         String token = jwtService.generateToken(new UserDetailsImpl(user));
 
-        return new LoginResponseDTO(token, user.getName(), user.getRole().name());
+        return new LoginResponseDTO(token, user.getName(), user.getRole().name(), user.isPasswordChanged());
     }
 
     public void register(RegisterRequestDTO dto) {
-        if (userRepository.findByEmail(dto.email()).isPresent()) {
-            throw new BusinessRuleException("E-mail já cadastrado.");
+        if (userRepository.findByCpf(dto.cpf()).isPresent()) {
+            throw new BusinessRuleException("CPF já cadastrado no sistema.");
         }
 
         User user = User.builder()
                 .name(dto.name())
-                .email(dto.email())
+                .cpf(dto.cpf())
+                .contactEmail(dto.contactEmail())
                 .passwordHash(passwordEncoder.encode(dto.password()))
                 .role(Role.EMPLOYEE)
-                .active(true)
+                .passwordChanged(false)
                 .build();
 
         userRepository.save(user);

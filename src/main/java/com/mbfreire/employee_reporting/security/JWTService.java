@@ -34,12 +34,12 @@ public class JWTService {
                 .compact();
     }
 
-    public String extractEmail(String token) {
+    public String extractCpf(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
-        String email = extractEmail(token);
+        String email = extractCpf(token);
         return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 

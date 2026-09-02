@@ -78,7 +78,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDTO> handleBadCredentials(BadCredentialsException e) {
         ErrorResponseDTO error = new ErrorResponseDTO(
                 HttpStatus.UNAUTHORIZED.value(),
-                "E-mail ou senha inválidos",
+                "CPF ou senha inválidos",
                 LocalDateTime.now()
         );
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);

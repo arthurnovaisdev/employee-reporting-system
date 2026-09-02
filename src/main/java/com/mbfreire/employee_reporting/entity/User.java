@@ -23,8 +23,11 @@ public class User {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true)
-    private String email;
+    @Column(nullable = false, unique = true, length = 11)
+    private String cpf;
+
+    @Column(name = "contact_email")
+    private String contactEmail;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
@@ -36,6 +39,9 @@ public class User {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(name = "password_changed", nullable = false)
+    private boolean passwordChanged;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -43,6 +49,7 @@ public class User {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.active = true;
+        this.passwordChanged = false;
     }
 
 

@@ -16,20 +16,20 @@ public class AdminBootstrapConfig {
     CommandLineRunner createInitialAdmin(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            @Value("${admin.bootstrap.email}") String adminEmail,
+            @Value("${admin.bootstrap.cpf}") String adminCpf,
             @Value("${admin.bootstrap.password}") String adminPassword
     ) {
         return args -> {
-         if (userRepository.findByEmail(adminEmail).isEmpty()) {
+         if (userRepository.findByCpf(adminCpf).isEmpty()) {
              User admin = User.builder()
                      .name("Administrador")
-                     .email(adminEmail)
+                     .cpf(adminCpf)
                      .passwordHash(passwordEncoder.encode(adminPassword))
                      .role(Role.ADMIN)
                      .build();
 
              userRepository.save(admin);
-             System.out.println("Conta de admin inicial criada: " + adminEmail);
+             System.out.println("Conta de admin inicial criada: " + adminCpf);
          }
         };
     }

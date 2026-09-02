@@ -23,9 +23,9 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado."));
     }
 
-    public User findByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("E-mail não encontrado."));
+    public User findByCpf(String cpf) {
+        return userRepository.findByCpf(cpf)
+                .orElseThrow(() -> new ResourceNotFoundException("CPF não encontrado."));
     }
 
     public Page<User> listPaged(Pageable pageable) {
