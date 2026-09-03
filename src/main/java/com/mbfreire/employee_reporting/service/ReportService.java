@@ -1,14 +1,16 @@
 package com.mbfreire.employee_reporting.service;
 
 import com.mbfreire.employee_reporting.dto.request.ReportRequestDTO;
+import com.mbfreire.employee_reporting.dto.request.ReportStatusUpdateRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.ProtocolResponseDTO;
 import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
-import com.mbfreire.employee_reporting.entity.Category;
-import com.mbfreire.employee_reporting.entity.Report;
+import com.mbfreire.employee_reporting.entity.*;
 import com.mbfreire.employee_reporting.enums.ReportStatus;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
+import com.mbfreire.employee_reporting.repository.AuditLogRepository;
 import com.mbfreire.employee_reporting.repository.CategoryRepository;
 import com.mbfreire.employee_reporting.repository.ReportRepository;
+import com.mbfreire.employee_reporting.repository.StatusHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,12 +19,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
 public class ReportService {
     private final ReportRepository reportRepository;
     private final CategoryRepository categoryRepository;
+    private final StatusHistoryRepository statusHistoryRepository;
+    private final AuditLogRepository auditLogRepository;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -78,12 +83,39 @@ public class ReportService {
     }
 
     @Transactional
-    public ReportResponseDTO updateStatus(String protocol, ReportStatus newStatus) {
+    public ReportResponseDTO updateStatus(String protocol, ReportStatusUpdateRequestDTO dto, User loggedInAdmin) {
         Report report = reportRepository.findByProtocol(protocol)
                 .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
 
+        ReportStatus oldStatus = report.getStatus();
+        ReportStatus newStatus = dto.newStatus();
+
+        if (oldStatus == newStatus) {
+            return new ReportResponseDTO(
+                    report.getProtocol(),
+                    report.getCategory().getName(),
+                    report.getDescription(),
+                    report.getStatus(),
+                    report.getCreatedAt()
+            );
+        }
+
         report.setStatus(newStatus);
         reportRepository.save(report);
+
+        StatusHistory history = StatusHistory.builder()
+                .report(report)
+                .status(newStatus)
+                .observation(dto.note())
+                .build();
+        statusHistoryRepository.save(history);
+
+        AuditLog audit = AuditLog.builder()
+                .action("UPDATE_STATUS: " + oldStatus + " -> " + newStatus)
+                .report(report)
+                .adminUser(loggedInAdmin)
+                .build();
+        auditLogRepository.save(audit);
 
         return new ReportResponseDTO(
                 report.getProtocol(),
