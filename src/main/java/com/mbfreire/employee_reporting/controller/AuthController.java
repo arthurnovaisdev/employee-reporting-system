@@ -4,6 +4,9 @@ import com.mbfreire.employee_reporting.dto.request.LoginRequestDTO;
 import com.mbfreire.employee_reporting.dto.request.RegisterRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.LoginResponseDTO;
 import com.mbfreire.employee_reporting.service.AuthService;
+import com.mbfreire.employee_reporting.dto.request.ForgotPasswordRequestDTO;
+import com.mbfreire.employee_reporting.dto.request.ResetPasswordRequestDTO;
+import com.mbfreire.employee_reporting.service.PasswordResetService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO dto) {
@@ -29,5 +33,17 @@ public class AuthController {
     public ResponseEntity<Void> register(@Valid @RequestBody RegisterRequestDTO dto) {
         authService.register(dto);
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDTO dto) {
+        passwordResetService.requestPasswordReset(dto);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequestDTO dto) {
+        passwordResetService.resetPassword(dto);
+        return ResponseEntity.ok().build();
     }
 }
