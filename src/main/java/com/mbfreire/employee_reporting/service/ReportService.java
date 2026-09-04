@@ -7,19 +7,18 @@ import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
 import com.mbfreire.employee_reporting.entity.*;
 import com.mbfreire.employee_reporting.enums.ReportStatus;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
-import com.mbfreire.employee_reporting.repository.AuditLogRepository;
-import com.mbfreire.employee_reporting.repository.CategoryRepository;
-import com.mbfreire.employee_reporting.repository.ReportRepository;
-import com.mbfreire.employee_reporting.repository.StatusHistoryRepository;
+import com.mbfreire.employee_reporting.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +27,8 @@ public class ReportService {
     private final CategoryRepository categoryRepository;
     private final StatusHistoryRepository statusHistoryRepository;
     private final AuditLogRepository auditLogRepository;
+    private final FileStorageService fileStorageService;
+    private final AttachmentRepository attachmentRepository;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -139,5 +140,29 @@ public class ReportService {
             sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
         }
         return sb.toString();
+    }
+
+    @Transactional
+    public void uploadAttachments(String protocol, List<MultipartFile> files) {
+        Report report = reportRepository.findByProtocol(protocol)
+                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
+
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("Nenhum arquivo foi enviado.");
+        }
+
+        for (MultipartFile file : files) {
+            String storedFileName = fileStorageService.storeFile(file);
+
+            Attachment attachment = Attachment.builder()
+                    .report(report)
+                    .originalFileName(file.getOriginalFilename())
+                    .storedFileName(storedFileName)
+                    .contentType(file.getContentType())
+                    .fileSize(file.getSize())
+                    .build();
+
+            attachmentRepository.save(attachment);
+        }
     }
 }
