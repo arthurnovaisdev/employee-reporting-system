@@ -8,9 +8,10 @@ import com.mbfreire.employee_reporting.security.UserDetailsImpl;
 import com.mbfreire.employee_reporting.service.ReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -53,9 +54,17 @@ public class ReportController {
 
     @GetMapping("/admin")
     public ResponseEntity<Page<ReportResponseDTO>> listAll(
-            @PageableDefault(page = 0, size = 10, sort = "createdAt") Pageable pageable
-            ) {
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
         Page<ReportResponseDTO> reports = reportService.findAll(pageable);
+
         return ResponseEntity.ok(reports);
     }
 

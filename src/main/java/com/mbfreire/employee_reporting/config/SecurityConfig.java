@@ -35,29 +35,95 @@ public class SecurityConfig {
             AuthenticationEntryPoint authenticationEntryPoint,
             AccessDeniedHandler accessDeniedHandler
     ) throws Exception {
+
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> {})
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(sm ->
+                        sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                 )
 
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
-                        .requestMatchers("/api/auth/register").hasRole("ADMIN")
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/users/me/**").authenticated()
-                        .requestMatchers("/api/users/**").hasRole("ADMIN")
-                        .requestMatchers("/api/reports/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/reports/**").hasAnyRole("EMPLOYEE", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/auth/register"
+                        ).hasRole("ADMIN")
+
+
+                        .requestMatchers(
+                                "/api/users/me/**"
+                        ).authenticated()
+
+
+                        .requestMatchers(
+                                "/api/users/**"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                "/api/reports/admin/**"
+                        ).hasRole("ADMIN")
+
+                        // Criar denúncia
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/reports"
+                        ).hasRole("EMPLOYEE")
+
+                        // Enviar anexos
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/reports/*/attachments"
+                        ).hasRole("EMPLOYEE")
+
+                        // Consultar denúncia por protocolo + código
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/reports/consult"
+                        ).hasRole("EMPLOYEE")
+
+
+                        // =========================
+                        // CATEGORIAS
+                        // =========================
+
+                        // Funcionário precisa listar categorias
+                        // para preencher o formulário de denúncia.
+                        // Admin também pode consultar.
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/categories"
+                        ).hasAnyRole("EMPLOYEE", "ADMIN")
+
+                        // Apenas ADMIN cria categorias
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/categories"
+                        ).hasRole("ADMIN")
 
                         .anyRequest().authenticated()
                 )
 
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }
@@ -65,20 +131,38 @@ public class SecurityConfig {
     @Bean
     public AuthenticationEntryPoint authenticationEntryPoint(ObjectMapper mapper) {
         return (request, response, authException) -> {
+
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
-            var error = new ErrorResponseDTO(401, "Token ausente ou inválido", LocalDateTime.now());
-            response.getWriter().write(mapper.writeValueAsString(error));
+
+            var error = new ErrorResponseDTO(
+                    401,
+                    "Token ausente ou inválido",
+                    LocalDateTime.now()
+            );
+
+            response.getWriter().write(
+                    mapper.writeValueAsString(error)
+            );
         };
     }
 
     @Bean
     public AccessDeniedHandler accessDeniedHandler(ObjectMapper mapper) {
         return (request, response, accessDeniedException) -> {
+
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType("application/json;charset=UTF-8");
-            var error = new ErrorResponseDTO(403, "Você não tem permissão para acessar este recurso", LocalDateTime.now());
-            response.getWriter().write(mapper.writeValueAsString(error));
+
+            var error = new ErrorResponseDTO(
+                    403,
+                    "Você não tem permissão para acessar este recurso",
+                    LocalDateTime.now()
+            );
+
+            response.getWriter().write(
+                    mapper.writeValueAsString(error)
+            );
         };
     }
 
@@ -88,8 +172,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception{
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config
+    ) throws Exception {
         return config.getAuthenticationManager();
     }
-
 }
