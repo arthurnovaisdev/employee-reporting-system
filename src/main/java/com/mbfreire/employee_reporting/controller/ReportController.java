@@ -36,9 +36,10 @@ public class ReportController {
     @PostMapping(value = "/{protocol}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> uploadAttachments(
             @PathVariable String protocol,
+            @RequestParam("trackingCode") String trackingCode,
             @RequestParam("files")List<MultipartFile> files
             ) {
-        reportService.uploadAttachments(protocol, files);
+        reportService.uploadAttachments(protocol, trackingCode, files);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 

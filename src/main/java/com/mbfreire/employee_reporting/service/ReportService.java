@@ -6,6 +6,7 @@ import com.mbfreire.employee_reporting.dto.response.ProtocolResponseDTO;
 import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
 import com.mbfreire.employee_reporting.entity.*;
 import com.mbfreire.employee_reporting.enums.ReportStatus;
+import com.mbfreire.employee_reporting.exception.BusinessRuleException;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -143,9 +144,13 @@ public class ReportService {
     }
 
     @Transactional
-    public void uploadAttachments(String protocol, List<MultipartFile> files) {
+    public void uploadAttachments(String protocol, String trackingCode, List<MultipartFile> files) {
         Report report = reportRepository.findByProtocol(protocol)
                 .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
+
+        if (!passwordEncoder.matches(trackingCode, report.getAccessCodeHash())) {
+            throw new BusinessRuleException("Código de rastreio inválido para este protocolo.");
+        }
 
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("Nenhum arquivo foi enviado.");
