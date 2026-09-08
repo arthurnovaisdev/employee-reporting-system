@@ -4,6 +4,7 @@ import com.mbfreire.employee_reporting.enums.ReportStatus;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record ReportAdminResponseDTO(
         String protocol,
@@ -12,5 +13,6 @@ public record ReportAdminResponseDTO(
         ReportStatus status,
         LocalDate incidentDate,
         String incidentLocation,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        List<AttachmentResponseDTO> attachments
 ) {}

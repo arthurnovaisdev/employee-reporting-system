@@ -1,12 +1,15 @@
 package com.mbfreire.employee_reporting.service;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,7 +31,7 @@ public class FileStorageService {
 
     @PostConstruct
     public void init() {
-        try{
+        try {
             Files.createDirectories(this.fileStorageLocation);
         } catch (Exception e) {
             throw new RuntimeException("Não foi possível criar o diretório onde os arquivos serão armazenados.", e);
@@ -63,6 +66,28 @@ public class FileStorageService {
             return storedFileName;
         } catch (IOException e) {
             throw new RuntimeException("Falha ao armazenar o arquivo " + originalFileName + ". Tente novamente.", e);
+        }
+    }
+
+    public Resource loadFile(String storedFileName) {
+        try {
+            Path filePath = this.fileStorageLocation
+                    .resolve(storedFileName)
+                    .normalize();
+
+            if (!filePath.startsWith(this.fileStorageLocation)) {
+                throw new RuntimeException("Caminho de arquivo inválido.");
+            }
+
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (!resource.exists() || !resource.isReadable()) {
+                throw new RuntimeException("Arquivo não encontrado ou não pode ser lido.");
+            }
+
+            return resource;
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("Não foi possível carregar o arquivo.", e);
         }
     }
 }

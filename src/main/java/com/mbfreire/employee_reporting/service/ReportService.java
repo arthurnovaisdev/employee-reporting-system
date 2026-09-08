@@ -2,14 +2,14 @@ package com.mbfreire.employee_reporting.service;
 
 import com.mbfreire.employee_reporting.dto.request.ReportRequestDTO;
 import com.mbfreire.employee_reporting.dto.request.ReportStatusUpdateRequestDTO;
-import com.mbfreire.employee_reporting.dto.response.ProtocolResponseDTO;
-import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
+import com.mbfreire.employee_reporting.dto.response.*;
 import com.mbfreire.employee_reporting.entity.*;
 import com.mbfreire.employee_reporting.enums.ReportStatus;
 import com.mbfreire.employee_reporting.exception.BusinessRuleException;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -18,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -82,6 +82,53 @@ public class ReportService {
                         report.getStatus(),
                         report.getCreatedAt()
                 ));
+    }
+
+    @Transactional(readOnly = true)
+    public ReportAdminResponseDTO findAdminDetail(String protocol) {
+
+        Report report = reportRepository.findByProtocol(protocol)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Denúncia não encontrada com o protocolo: " + protocol
+                        ));
+        List<AttachmentResponseDTO> attachments =
+                attachmentRepository.findByReportId(report.getId())
+                        .stream()
+                        .map(attachment -> new AttachmentResponseDTO(
+                                attachment.getId(),
+                                attachment.getOriginalFileName(),
+                                attachment.getContentType(),
+                                attachment.getFileSize(),
+                                attachment.getCreatedAt()
+                        ))
+                        .toList();
+
+        return new ReportAdminResponseDTO(
+                report.getProtocol(),
+                report.getCategory().getName(),
+                report.getDescription(),
+                report.getStatus(),
+                report.getIncidentDate(),
+                report.getIncidentLocation(),
+                report.getCreatedAt(),
+                attachments
+        );
+    }
+
+    public AttachmentDownloadDTO downloadAttachment (String protocol, UUID attachmentId) {
+        Attachment attachment = attachmentRepository.findByIdAndReportProtocol(attachmentId, protocol)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Anexo não encontrado.")
+                );
+
+        Resource resource = fileStorageService.loadFile(attachment.getStoredFileName());
+
+        return new AttachmentDownloadDTO(
+                resource,
+                attachment.getOriginalFileName(),
+                attachment.getContentType()
+        );
     }
 
     @Transactional
