@@ -23,7 +23,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public void ChangePassword(UUID userId, ChangePasswordRequestDTO dto) {
+    public void changePassword(UUID userId, ChangePasswordRequestDTO dto) {
         User user = findById(userId);
 
         if (!passwordEncoder.matches(dto.currentPassword(), user.getPasswordHash())) {
@@ -31,33 +31,46 @@ public class UserService {
         }
 
         if (passwordEncoder.matches(dto.newPassword(), user.getPasswordHash())) {
-            throw new BusinessRuleException("A nova senha não pode ser igual à senha provisória.");
+            throw new BusinessRuleException("A nova senha não pode ser igual à senha atual.");
         }
 
         user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
         user.setPasswordChanged(true);
-
+        user.incrementTokenVersion();
         userRepository.save(user);
     }
 
+    @Transactional(readOnly = true)
     public User findById(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado."));
     }
 
+    @Transactional(readOnly = true)
     public User findByCpf(String cpf) {
         return userRepository.findByCpf(cpf)
                 .orElseThrow(() -> new ResourceNotFoundException("CPF não encontrado."));
     }
 
+    @Transactional(readOnly = true)
     public Page<User> listPaged(Pageable pageable) {
         return userRepository.findAll(pageable);
     }
 
     @Transactional
-    public void setActiveStatus(UUID id, boolean active) {
+    public void setActiveStatus(UUID id, boolean active, UUID loggedInAdminId) {
+        if (!active && id.equals(loggedInAdminId)) {
+            throw new BusinessRuleException("Você não pode desativar a própria conta.");
+        }
+
         User user = findById(id);
+
+        if (user.isActive() == active){
+            return;
+        }
+
         user.setActive(active);
+        user.incrementTokenVersion();
         userRepository.save(user);
     }
 }

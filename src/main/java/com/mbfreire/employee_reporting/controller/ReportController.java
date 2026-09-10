@@ -9,6 +9,9 @@ import com.mbfreire.employee_reporting.dto.response.ReportResponseDTO;
 import com.mbfreire.employee_reporting.security.UserDetailsImpl;
 import com.mbfreire.employee_reporting.service.ReportService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +22,7 @@ import org.springframework.http.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.validation.annotation.Validated;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -27,6 +31,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
+@Validated
 public class ReportController {
 
     private final ReportService reportService;
@@ -39,8 +44,8 @@ public class ReportController {
 
     @PostMapping(value = "/{protocol}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> uploadAttachments(
-            @PathVariable String protocol,
-            @RequestParam("trackingCode") String trackingCode,
+            @PathVariable @Pattern (regexp = "DEN-\\d{4}-[A-HJ-NP-Z2-9]{8}", message = "O protocolo informado é inválido.") String protocol,
+            @RequestParam("trackingCode") @Pattern(regexp = "[A-HJ-NP-Z2-9]{10}", message = "O código de rastreio informado é inválido.") String trackingCode,
             @RequestParam("files")List<MultipartFile> files
             ) {
         reportService.uploadAttachments(protocol, trackingCode, files);
@@ -49,16 +54,16 @@ public class ReportController {
 
     @GetMapping("/consult")
     public ResponseEntity<ReportResponseDTO> consult(
-            @RequestParam String protocol,
-            @RequestParam String code
+            @RequestParam @Pattern(regexp = "DEN-\\d{4}-[A-HJ-NP-Z2-9]{8}", message = "O protocolo informado é inválido.") String protocol,
+            @RequestParam @Pattern(regexp = "[A-HJ-NP-Z2-9]{10}", message = "O código de acesso informado é inválido.") String code
     ) {
         return ResponseEntity.ok(reportService.consult(protocol, code));
     }
 
     @GetMapping("/admin")
     public ResponseEntity<Page<ReportResponseDTO>> listAll(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "A página não pode ser negativa") int page,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "O tamanho da página deve ser no mínimo 1.") @Max(value = 50, message = "O tamanho da página deve ser no máximo 50.") int size
     ) {
         Pageable pageable = PageRequest.of(
                 page,
@@ -72,18 +77,18 @@ public class ReportController {
     }
 
     @GetMapping("/admin/{protocol}")
-    public ResponseEntity<ReportAdminResponseDTO> findAdminDetail(@PathVariable String protocol) {
+    public ResponseEntity<ReportAdminResponseDTO> findAdminDetail(@PathVariable @Pattern(regexp = "DEN-\\d{4}-[A-HJ-NP-Z2-9]{8}", message = "O protocolo informado é inválido.") String protocol) {
         ReportAdminResponseDTO response = reportService.findAdminDetail(protocol);
 
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/admin/{protocol}/attachments/{attachmentId}")
-    public ResponseEntity<Resource> downloadAttachment(@PathVariable String protocol, @PathVariable UUID attachmentId) {
+    public ResponseEntity<Resource> downloadAttachment(@PathVariable @Pattern(regexp = "DEN-\\d{4}-[A-HJ-NP-Z2-9]{8}", message = "O protocolo informado é inválido.") String protocol, @PathVariable UUID attachmentId) {
         AttachmentDownloadDTO attachment = reportService.downloadAttachment(protocol, attachmentId);
 
         ContentDisposition contentDisposition = ContentDisposition
-                .inline()
+                .attachment()
                 .filename(
                         attachment.originalFileName(),
                         StandardCharsets.UTF_8
@@ -98,12 +103,20 @@ public class ReportController {
                 .header(
                         HttpHeaders.CONTENT_DISPOSITION,
                         contentDisposition.toString()
-                ).body(attachment.resource());
+                )
+                .header(
+                        "X-Content-Type-Options",
+                        "nosniff"
+                )
+                .cacheControl(
+                        CacheControl.noStore()
+                )
+                .body(attachment.resource());
     }
 
     @PatchMapping("/admin/{protocol}/status")
     public ResponseEntity<ReportResponseDTO> updateStatus(
-            @PathVariable String protocol,
+            @PathVariable @Pattern(regexp = "DEN-\\d{4}-[A-HJ-NP-Z2-9]{8}", message = "O protocolo informado é inválido.") String protocol,
             @Valid @RequestBody ReportStatusUpdateRequestDTO dto,
             @AuthenticationPrincipal UserDetailsImpl principal
             ) {

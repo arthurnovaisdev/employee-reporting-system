@@ -1,7 +1,5 @@
 package com.mbfreire.employee_reporting.security;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mbfreire.employee_reporting.dto.response.ErrorResponseDTO;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -18,6 +16,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -28,6 +27,7 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
 
     private final JWTService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final ObjectMapper objectMapper;
 
     @Override
     protected void doFilterInternal(
@@ -36,49 +36,179 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
+        String authHeader =
+                request.getHeader("Authorization");
+
+        /*
+         * Não existe Bearer Token.
+         *
+         * Apenas deixa a requisição continuar.
+         * Se o endpoint for protegido,
+         * o Spring Security retornará 401.
+         */
+        if (authHeader == null
+                || !authHeader.startsWith("Bearer ")) {
+
+            filterChain.doFilter(
+                    request,
+                    response
+            );
+
+            return;
+        }
+
+        String token =
+                authHeader.substring(7);
+
         try {
-            String authHeader = request.getHeader("Authorization");
 
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                filterChain.doFilter(request, response);
-                return;
-            }
+            String cpf =
+                    jwtService.extractCpf(token);
 
-            String token = authHeader.substring(7);
-            String cpf = jwtService.extractCpf(token);
+            /*
+             * Só tenta autenticar caso ainda não exista
+             * uma autenticação no SecurityContext.
+             */
+            if (cpf != null
+                    && SecurityContextHolder
+                    .getContext()
+                    .getAuthentication() == null) {
 
-            if (cpf != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(cpf);
+                UserDetails userDetails =
+                        userDetailsService
+                                .loadUserByUsername(cpf);
 
-                if (jwtService.isTokenValid(token, userDetails)) {
-                    var authToken = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities()
+                if (!userDetails.isEnabled()) {
+
+                    SecurityContextHolder
+                            .clearContext();
+
+                    sendErrorResponse(
+                            response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            "Usuário desativado ou não autorizado."
                     );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                    return;
                 }
+
+                /*
+                 * Confirma assinatura, subject,
+                 * expiração etc. conforme JWTService.
+                 */
+                if (!jwtService.isTokenValid(
+                        token,
+                        userDetails
+                )) {
+
+                    SecurityContextHolder
+                            .clearContext();
+
+                    sendErrorResponse(
+                            response,
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            "Token de acesso inválido."
+                    );
+
+                    return;
+                }
+
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+
+                authToken.setDetails(
+                        new WebAuthenticationDetailsSource()
+                                .buildDetails(request)
+                );
+
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(authToken);
             }
-            filterChain.doFilter(request, response);
+
+            filterChain.doFilter(
+                    request,
+                    response
+            );
+
         } catch (ExpiredJwtException e) {
-            sendErrorResponse(response, 401, "Sessão expirada. Faça login novamente.");
-        } catch (JwtException e) {
-            sendErrorResponse(response, 401, "Token de acesso inválido ou malformado.");
+
+            SecurityContextHolder.clearContext();
+
+            sendErrorResponse(
+                    response,
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    "Sessão expirada. Faça login novamente."
+            );
+
+        } catch (JwtException | IllegalArgumentException e) {
+
+            SecurityContextHolder.clearContext();
+
+            sendErrorResponse(
+                    response,
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    "Token de acesso inválido ou malformado."
+            );
+
         } catch (UsernameNotFoundException e) {
-            sendErrorResponse(response, 401, "Usuário desativado ou não encontrado.");
+
+            /*
+             * Exemplo:
+             *
+             * usuário existia quando o JWT foi criado,
+             * mas posteriormente foi removido.
+             */
+
+            SecurityContextHolder.clearContext();
+
+            sendErrorResponse(
+                    response,
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    "Usuário desativado ou não encontrado."
+            );
+
         } catch (Exception e) {
-            sendErrorResponse(response, 500, "Erro interno de autenticação.");
+
+            SecurityContextHolder.clearContext();
+
+            sendErrorResponse(
+                    response,
+                    HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    "Erro interno de autenticação."
+            );
         }
     }
 
-    private void sendErrorResponse(HttpServletResponse response, int status, String message) throws IOException {
+    private void sendErrorResponse(
+            HttpServletResponse response,
+            int status,
+            String message
+    ) throws IOException {
+
+        if (response.isCommitted()) {
+            return;
+        }
+
         response.setStatus(status);
-        response.setContentType("application/json;charset=UTF-8");
 
-        ErrorResponseDTO error = new ErrorResponseDTO(status, message, LocalDateTime.now());
+        response.setContentType(
+                "application/json;charset=UTF-8"
+        );
 
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
+        ErrorResponseDTO error =
+                new ErrorResponseDTO(
+                        status,
+                        message,
+                        LocalDateTime.now()
+                );
 
-        response.getWriter().write(mapper.writeValueAsString(error));
+        response.getWriter().write(
+                objectMapper.writeValueAsString(error)
+        );
     }
 }

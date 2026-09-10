@@ -42,7 +42,10 @@ public class User {
     @Column(name = "password_changed", nullable = false)
     private boolean passwordChanged;
 
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "token_version", nullable = false)
+    private long tokenVersion;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @PrePersist
@@ -50,6 +53,11 @@ public class User {
         this.createdAt = LocalDateTime.now();
         this.active = true;
         this.passwordChanged = false;
+        this.tokenVersion = 0L;
+    }
+
+    public void incrementTokenVersion() {
+        this.tokenVersion++;
     }
 
 

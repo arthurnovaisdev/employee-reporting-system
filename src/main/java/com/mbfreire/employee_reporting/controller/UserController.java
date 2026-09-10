@@ -6,12 +6,17 @@ import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.security.UserDetailsImpl;
 import com.mbfreire.employee_reporting.service.UserService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -19,6 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("api/users")
 @RequiredArgsConstructor
+@Validated
 public class UserController {
 
     private final UserService userService;
@@ -29,8 +35,8 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<Page<UserResponseDTO>> list(
-            @PageableDefault(size = 20, sort = "name") Pageable pageable) {
+    public ResponseEntity<Page<UserResponseDTO>> list(@RequestParam(defaultValue = "0") @Min(value = 0, message = "A página não pode ser negativa.") int page, @RequestParam(defaultValue = "20") @Min(value = 1, message = "O tamanho da página deve ser no mínimo 1.") @Max(value = 50, message = "O tamanho da página deve ser no máximo 50.") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC,"name"));
         return ResponseEntity.ok(userService.listPaged(pageable).map(this::toDTO));
     }
 
@@ -44,19 +50,19 @@ public class UserController {
             @AuthenticationPrincipal UserDetailsImpl principal,
             @Valid @RequestBody ChangePasswordRequestDTO dto
             ) {
-        userService.ChangePassword(principal.getUser().getId(), dto);
+        userService.changePassword(principal.getUser().getId(), dto);
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<Void> deactivate(@PathVariable UUID id) {
-        userService.setActiveStatus(id, false);
+    public ResponseEntity<Void> deactivate(@PathVariable UUID id, @AuthenticationPrincipal UserDetailsImpl principal) {
+        userService.setActiveStatus(id, false, principal.getUser().getId());
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/activate")
-    public ResponseEntity<Void> activate(@PathVariable UUID id) {
-        userService.setActiveStatus(id, true);
+    public ResponseEntity<Void> activate(@PathVariable UUID id, @AuthenticationPrincipal UserDetailsImpl principal) {
+        userService.setActiveStatus(id, true, principal.getUser().getId());
         return ResponseEntity.noContent().build();
     }
 

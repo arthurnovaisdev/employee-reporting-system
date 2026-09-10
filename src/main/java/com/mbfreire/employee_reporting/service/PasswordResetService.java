@@ -5,66 +5,234 @@ import com.mbfreire.employee_reporting.dto.request.ResetPasswordRequestDTO;
 import com.mbfreire.employee_reporting.entity.PasswordResetToken;
 import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.exception.BusinessRuleException;
-import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.PasswordResetTokenRepository;
 import com.mbfreire.employee_reporting.repository.UserRepository;
+import com.mbfreire.employee_reporting.security.RateLimitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.UUID;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class PasswordResetService {
 
+    private static final int RESET_TOKEN_BYTES = 32;
+
+    private final RateLimitService rateLimitService;
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
 
-    @Transactional
-    public void requestPasswordReset(ForgotPasswordRequestDTO dto) {
-        User user = userRepository.findByCpf(dto.cpf())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado."));
+    private final SecureRandom secureRandom =
+            new SecureRandom();
 
-        if (user.getContactEmail() == null || user.getContactEmail().isBlank()) {
-            throw new BusinessRuleException("Este usuário não possui um e-mail de contato cadastrado para recuperação.");
+    @Transactional
+    public void requestPasswordReset(
+            ForgotPasswordRequestDTO dto
+    ) {
+        boolean accountAllowed =
+                rateLimitService.allowSensitiveIdentifier(
+                        "forgot-password-account",
+                        dto.cpf(),
+                        3,
+                        Duration.ofMinutes(30)
+                );
+
+        if (!accountAllowed) {
+            return;
         }
 
-        String tokenString = UUID.randomUUID().toString();
-        PasswordResetToken resetToken = PasswordResetToken.builder()
-                .token(tokenString)
-                .user(user)
-                .expiryDate(LocalDateTime.now().plusHours(1))
-                .used(false)
-                .build();
+        tokenRepository.deleteExpiredOrUsed(
+                LocalDateTime.now()
+        );
 
-        tokenRepository.save(resetToken);
+        Optional<User> optionalUser =
+                userRepository.findByCpf(
+                        dto.cpf()
+                );
 
-        emailService.sendPasswordResetEmail(user.getContactEmail(), user.getName(), tokenString);
+        if (optionalUser.isEmpty()) {
+            return;
+        }
+
+        User user =
+                optionalUser.get();
+
+        if (!user.isActive()) {
+            return;
+        }
+
+        if (user.getContactEmail() == null
+                || user.getContactEmail().isBlank()) {
+
+            return;
+        }
+
+        tokenRepository.deleteAllByUserId(
+                user.getId()
+        );
+
+        String rawToken =
+                generateSecureToken();
+
+        String tokenHash =
+                hashToken(rawToken);
+
+        PasswordResetToken resetToken =
+                PasswordResetToken.builder()
+                        .tokenHash(tokenHash)
+                        .user(user)
+                        .expiryDate(
+                                LocalDateTime.now()
+                                        .plusHours(1)
+                        )
+                        .used(false)
+                        .build();
+
+        tokenRepository.saveAndFlush(
+                resetToken
+        );
+
+        emailService.sendPasswordResetEmail(
+                user.getContactEmail(),
+                user.getName(),
+                rawToken
+        );
     }
 
     @Transactional
-    public void resetPassword(ResetPasswordRequestDTO dto) {
-        PasswordResetToken resetToken = tokenRepository.findByToken(dto.token())
-                .orElseThrow(() -> new ResourceNotFoundException("Token inválido ou não encontrado."));
+    public void resetPassword(
+            ResetPasswordRequestDTO dto
+    ) {
 
-        if (resetToken.isUsed()) {
-            throw new BusinessRuleException("Este link de recuperação já foi utilizado.");
-        }
-        if (resetToken.isExpired()) {
-            throw new BusinessRuleException("O link de recuperação expirou. Solicite um novo.");
+        String tokenHash =
+                hashToken(
+                        dto.token()
+                );
+
+        PasswordResetToken resetToken =
+                tokenRepository
+                        .findByTokenHashForUpdate(
+                                tokenHash
+                        )
+                        .orElseThrow(() ->
+                                new BusinessRuleException(
+                                        "Token inválido ou expirado."
+                                )
+                        );
+
+        if (resetToken.isUsed()
+                || resetToken.isExpired()) {
+
+            throw new BusinessRuleException(
+                    "Token inválido ou expirado."
+            );
         }
 
-        User user = resetToken.getUser();
-        user.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
+        User user =
+                resetToken.getUser();
+
+        if (!user.isActive()) {
+
+            throw new BusinessRuleException(
+                    "Não foi possível redefinir a senha."
+            );
+        }
+
+        if (passwordEncoder.matches(
+                dto.newPassword(),
+                user.getPasswordHash()
+        )) {
+
+            throw new BusinessRuleException(
+                    "A nova senha não pode ser igual à senha atual."
+            );
+        }
+
+        user.setPasswordHash(
+                passwordEncoder.encode(
+                        dto.newPassword()
+                )
+        );
+
         user.setPasswordChanged(true);
-        userRepository.save(user);
 
-        resetToken.setUsed(true);
-        tokenRepository.save(resetToken);
+        user.incrementTokenVersion();
+
+        userRepository.save(
+                user
+        );
+
+        tokenRepository.deleteAllByUserId(
+                user.getId()
+        );
+    }
+
+    private String generateSecureToken() {
+
+        byte[] randomBytes =
+                new byte[RESET_TOKEN_BYTES];
+
+        secureRandom.nextBytes(
+                randomBytes
+        );
+
+        return Base64
+                .getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(
+                        randomBytes
+                );
+    }
+
+    private String hashToken(
+            String rawToken
+    ) {
+
+        if (rawToken == null
+                || rawToken.isBlank()) {
+
+            throw new BusinessRuleException(
+                    "Token inválido ou expirado."
+            );
+        }
+
+        try {
+
+            MessageDigest digest =
+                    MessageDigest.getInstance(
+                            "SHA-256"
+                    );
+
+            byte[] hash =
+                    digest.digest(
+                            rawToken.getBytes(
+                                    StandardCharsets.UTF_8
+                            )
+                    );
+
+            return HexFormat
+                    .of()
+                    .formatHex(hash);
+
+        } catch (NoSuchAlgorithmException e) {
+
+            throw new IllegalStateException(
+                    "SHA-256 não está disponível.",
+                    e
+            );
+        }
     }
 }

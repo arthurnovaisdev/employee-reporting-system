@@ -12,38 +12,52 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.security.SecureRandom;
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @Service
 @RequiredArgsConstructor
 public class ReportService {
+
+    private static final String CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final int TRACKING_CODE_LENGTH = 10;
+    private static final int PROTOCOL_RANDOM_LENGTH = 8;
+    private static final int MAX_PROTOCOL_GENERATION_ATTEMPTS = 20;
+    private static final int MAX_ATTACHMENTS_PER_REPORT = 5;
+    private static final long MAX_TOTAL_ATTACHMENT_BYTES = 25L * 1024 * 1024;
+
     private final ReportRepository reportRepository;
     private final CategoryRepository categoryRepository;
     private final StatusHistoryRepository statusHistoryRepository;
     private final AuditLogRepository auditLogRepository;
     private final FileStorageService fileStorageService;
     private final AttachmentRepository attachmentRepository;
-
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    private static final String CHARACTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private final PasswordEncoder passwordEncoder;
+    private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
     public ProtocolResponseDTO register(ReportRequestDTO dto) {
         Category category = categoryRepository.findById(dto.categoryId())
                 .orElseThrow(() -> new ResourceNotFoundException("Categoria não encontrada."));
 
+        if (!category.isActive()) {
+            throw new BusinessRuleException("A categoria selecionada não está disponível.");
+        }
+
         String trackingCode = generateTrackingCode();
 
         Report report = Report.builder()
-                .protocol(generateProtocol())
+                .protocol(generateUniqueProtocol())
                 .accessCodeHash(passwordEncoder.encode(trackingCode))
                 .category(category)
                 .description(dto.description())
@@ -56,42 +70,29 @@ public class ReportService {
         return new ProtocolResponseDTO(report.getProtocol(), trackingCode);
     }
 
+    @Transactional(readOnly = true)
     public ReportResponseDTO consult(String protocol, String code) {
         Report report = reportRepository.findByProtocol(protocol)
-                .orElseThrow(() -> new ResourceNotFoundException("Protocolo não encontrado."));
+                .orElseThrow(() -> new ResourceNotFoundException("Protocolo ou código de acesso inválido."));
 
         if (!passwordEncoder.matches(code, report.getAccessCodeHash())) {
             throw new ResourceNotFoundException("Protocolo ou código de acesso inválido.");
         }
 
-        return new ReportResponseDTO(
-                report.getProtocol(),
-                report.getCategory().getName(),
-                report.getDescription(),
-                report.getStatus(),
-                report.getCreatedAt()
-        );
+        return toResponseDTO(report);
     }
 
+    @Transactional(readOnly = true)
     public Page<ReportResponseDTO> findAll(Pageable pageable) {
         return reportRepository.findAll(pageable)
-                .map(report -> new ReportResponseDTO(
-                        report.getProtocol(),
-                        report.getCategory().getName(),
-                        report.getDescription(),
-                        report.getStatus(),
-                        report.getCreatedAt()
-                ));
+                .map(this::toResponseDTO);
     }
 
     @Transactional(readOnly = true)
     public ReportAdminResponseDTO findAdminDetail(String protocol) {
-
         Report report = reportRepository.findByProtocol(protocol)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Denúncia não encontrada com o protocolo: " + protocol
-                        ));
+                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada"));
+
         List<AttachmentResponseDTO> attachments =
                 attachmentRepository.findByReportId(report.getId())
                         .stream()
@@ -116,11 +117,10 @@ public class ReportService {
         );
     }
 
+    @Transactional(readOnly = true)
     public AttachmentDownloadDTO downloadAttachment (String protocol, UUID attachmentId) {
         Attachment attachment = attachmentRepository.findByIdAndReportProtocol(attachmentId, protocol)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Anexo não encontrado.")
-                );
+                .orElseThrow(() -> new ResourceNotFoundException("Anexo não encontrado."));
 
         Resource resource = fileStorageService.loadFile(attachment.getStoredFileName());
 
@@ -134,19 +134,13 @@ public class ReportService {
     @Transactional
     public ReportResponseDTO updateStatus(String protocol, ReportStatusUpdateRequestDTO dto, User loggedInAdmin) {
         Report report = reportRepository.findByProtocol(protocol)
-                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
+                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada."));
 
         ReportStatus oldStatus = report.getStatus();
         ReportStatus newStatus = dto.newStatus();
 
         if (oldStatus == newStatus) {
-            return new ReportResponseDTO(
-                    report.getProtocol(),
-                    report.getCategory().getName(),
-                    report.getDescription(),
-                    report.getStatus(),
-                    report.getCreatedAt()
-            );
+            return toResponseDTO(report);
         }
 
         report.setStatus(newStatus);
@@ -166,6 +160,175 @@ public class ReportService {
                 .build();
         auditLogRepository.save(audit);
 
+        return toResponseDTO(report);
+    }
+
+    @Transactional
+    public void uploadAttachments(String protocol, String trackingCode, List<MultipartFile> files) {
+        Report report = reportRepository.findByProtocolForUpdate(protocol)
+                .orElseThrow(() -> new ResourceNotFoundException("Denúncia ou código de acesso inválido."));
+
+        if (!passwordEncoder.matches(trackingCode, report.getAccessCodeHash())) {
+            throw new ResourceNotFoundException("Denúncia ou código de acesso inválido.");
+        }
+
+        if (files == null || files.isEmpty()) {
+            throw new BusinessRuleException("Nenhum arquivo foi enviado.");
+        }
+
+        validateAttachmentQuota(report, files);
+
+        List<String> storedFiles = new ArrayList<>();
+
+        registerRollbackCleanup(storedFiles);
+
+        for (MultipartFile file : files) {
+            FileStorageService.StoredFile storedFile = fileStorageService.storeFile(file);
+            storedFiles.add(storedFile.storedFileName());
+
+            Attachment attachment = Attachment.builder()
+                    .report(report)
+                    .originalFileName(file.getOriginalFilename())
+                    .storedFileName(storedFile.storedFileName())
+                    .contentType(file.getContentType())
+                    .fileSize(file.getSize())
+                    .build();
+
+            attachmentRepository.save(attachment);
+        }
+        attachmentRepository.flush();
+    }
+
+    private void validateAttachmentQuota(Report report, List<MultipartFile> files) {
+        long existingCount =
+                attachmentRepository
+                        .countByReportId(
+                                report.getId()
+                        );
+
+        if (existingCount
+                + files.size()
+                > MAX_ATTACHMENTS_PER_REPORT) {
+
+            throw new BusinessRuleException(
+                    "Cada denúncia pode possuir no máximo "
+                            + MAX_ATTACHMENTS_PER_REPORT
+                            + " anexos."
+            );
+        }
+
+        Long storedBytesResult =
+                attachmentRepository
+                        .sumFileSizeByReportId(
+                                report.getId()
+                        );
+
+        long existingBytes =
+                storedBytesResult == null
+                        ? 0L
+                        : storedBytesResult;
+
+        long incomingBytes =
+                0L;
+
+        for (MultipartFile file : files) {
+
+            if (file == null
+                    || file.isEmpty()) {
+
+                throw new BusinessRuleException(
+                        "Um dos arquivos enviados está vazio."
+                );
+            }
+
+            try {
+                incomingBytes =
+                        Math.addExact(
+                                incomingBytes,
+                                file.getSize()
+                        );
+
+            } catch (ArithmeticException e) {
+
+                throw new BusinessRuleException(
+                        "O tamanho total dos arquivos enviados é inválido."
+                );
+            }
+        }
+
+        long totalBytes;
+
+        try {
+            totalBytes =
+                    Math.addExact(
+                            existingBytes,
+                            incomingBytes
+                    );
+
+        } catch (ArithmeticException e) {
+            throw new BusinessRuleException("O tamanho total dos anexos é inválido.");
+        }
+
+        if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
+            throw new BusinessRuleException("Os anexos de uma denúncia não podem ultrapassar 25 MB no total.");
+        }
+    }
+
+    private void registerRollbackCleanup(
+            List<String> storedFiles
+    ) {
+
+        if (!TransactionSynchronizationManager
+                .isSynchronizationActive()) {
+
+            throw new IllegalStateException(
+                    "A transação de upload não está ativa."
+            );
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                    for (String storedFileName : storedFiles) {
+                        fileStorageService.deleteFile(storedFileName);
+                                    }
+                                }
+                            }
+                        }
+                );
+    }
+
+    private String generateUniqueProtocol() {
+        int year = Year.now().getValue();
+
+        for (int attempt = 0; attempt < MAX_PROTOCOL_GENERATION_ATTEMPTS; attempt++) {
+            String protocol = "DEN-" + year + "-" + generateRandomCode(PROTOCOL_RANDOM_LENGTH);
+            if (!reportRepository.existsByProtocol(protocol)) {
+                return protocol;
+            }
+        }
+        throw new IllegalStateException("Não foi possível gerar um protocolo único.");
+    }
+
+    private String generateTrackingCode() {
+        return generateRandomCode(TRACKING_CODE_LENGTH);
+    }
+
+    private String generateRandomCode(int length) {
+        StringBuilder builder = new StringBuilder(length);
+
+        for (int i = 0; i < length; i++) {
+            int index = secureRandom.nextInt(CHARACTERS.length());
+            builder.append(CHARACTERS.charAt(index));
+        }
+        return builder.toString();
+    }
+
+    private ReportResponseDTO toResponseDTO(
+            Report report
+    ) {
+
         return new ReportResponseDTO(
                 report.getProtocol(),
                 report.getCategory().getName(),
@@ -173,48 +336,5 @@ public class ReportService {
                 report.getStatus(),
                 report.getCreatedAt()
         );
-    }
-
-    private String generateProtocol() {
-        int year = java.time.Year.now().getValue();
-        String number = String.valueOf((int) (Math.random() * 9000000) + 1000000);
-        return "DEN-" + year + "-" + number;
-    }
-
-    private String generateTrackingCode() {
-        SecureRandom random = new SecureRandom();
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 6; i++) {
-            sb.append(CHARACTERS.charAt(random.nextInt(CHARACTERS.length())));
-        }
-        return sb.toString();
-    }
-
-    @Transactional
-    public void uploadAttachments(String protocol, String trackingCode, List<MultipartFile> files) {
-        Report report = reportRepository.findByProtocol(protocol)
-                .orElseThrow(() -> new ResourceNotFoundException("Denúncia não encontrada com o protocolo: " + protocol));
-
-        if (!passwordEncoder.matches(trackingCode, report.getAccessCodeHash())) {
-            throw new BusinessRuleException("Código de rastreio inválido para este protocolo.");
-        }
-
-        if (files == null || files.isEmpty()) {
-            throw new IllegalArgumentException("Nenhum arquivo foi enviado.");
-        }
-
-        for (MultipartFile file : files) {
-            String storedFileName = fileStorageService.storeFile(file);
-
-            Attachment attachment = Attachment.builder()
-                    .report(report)
-                    .originalFileName(file.getOriginalFilename())
-                    .storedFileName(storedFileName)
-                    .contentType(file.getContentType())
-                    .fileSize(file.getSize())
-                    .build();
-
-            attachmentRepository.save(attachment);
-        }
     }
 }

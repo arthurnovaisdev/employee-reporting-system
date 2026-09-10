@@ -33,5 +33,6 @@ build/
 .vscode/
 
 .env
+uploads/
 
 CONTEXT_BACKEND.md

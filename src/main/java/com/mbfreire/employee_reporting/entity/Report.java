@@ -24,7 +24,7 @@ public class Report {
     @Column(nullable = false, unique = true)
     private String protocol;
 
-    @Column(name = "acess_code_hash", nullable = false)
+    @Column(name = "access_code_hash", nullable = false)
     private String accessCodeHash;
 
     @ManyToOne(fetch = FetchType.LAZY)

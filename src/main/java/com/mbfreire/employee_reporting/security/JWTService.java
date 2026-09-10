@@ -8,11 +8,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.function.Function;
 
 @Service
 public class JWTService {
+
+    private static final String TOKEN_VERSION_CLAIM = "tokenVersion";
 
     @Value("${jwt.secret}")
     private String secret;
@@ -21,13 +24,17 @@ public class JWTService {
     private long expirationMs;
 
     private SecretKey getKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String generateToken(UserDetails userDetails) {
+        if (!(userDetails instanceof UserDetailsImpl customUserDetails)) {
+            throw new IllegalArgumentException("Tipo de usuário inválido para a geração do JWT.");
+        }
         return Jwts.builder()
                 .subject(userDetails.getUsername())
                 .claim("role", userDetails.getAuthorities().iterator().next().getAuthority())
+                .claim(TOKEN_VERSION_CLAIM, customUserDetails.getUser().getTokenVersion())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getKey())
@@ -38,13 +45,34 @@ public class JWTService {
         return extractClaim(token, Claims::getSubject);
     }
 
+    public long extractTokenVersion(String token) {
+        Object value = extractClaim(token, claims -> claims.get(TOKEN_VERSION_CLAIM));
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return -1L;
+    }
+
     public boolean isTokenValid(String token, UserDetails userDetails) {
-        String email = extractCpf(token);
-        return email.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        if (!(userDetails instanceof UserDetailsImpl customUserDetails)) {
+            return false;
+        }
+        String cpf = extractCpf(token);
+        long tokenVersion = extractTokenVersion(token);
+        long currentTokenVersion = customUserDetails.getUser().getTokenVersion();
+        boolean sameUser = cpf.equals(userDetails.getUsername());
+        boolean sameTokenVersion = tokenVersion == currentTokenVersion;
+
+        return sameUser && sameTokenVersion && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {
-        return extractClaim(token, Claims::getExpiration).before(new Date());
+        Date expiration = extractClaim(
+                token,
+                Claims::getExpiration
+        );
+
+        return expiration.before(new Date());
     }
 
     private <T> T extractClaim(String token, Function<Claims, T> resolver) {
