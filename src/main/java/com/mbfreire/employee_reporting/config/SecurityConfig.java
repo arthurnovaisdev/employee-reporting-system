@@ -62,6 +62,19 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
+                        // HEALTH CHECK
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/health"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.HEAD,
+                                "/api/health"
+                        ).permitAll()
+
+
                         // AUTENTICAÇÃO PÚBLICA
 
                         .requestMatchers(
