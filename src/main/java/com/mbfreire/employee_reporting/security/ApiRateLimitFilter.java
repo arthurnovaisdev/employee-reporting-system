@@ -219,28 +219,18 @@ public class ApiRateLimitFilter
             HttpServletRequest request
     ) {
 
-        String remote =
-                request.getRemoteAddr();
+        String cloudflareIp =
+                request.getHeader(
+                        "CF-Connecting-IP"
+                );
 
-        if ("127.0.0.1".equals(remote)
-                || "0:0:0:0:0:0:0:1".equals(remote)
-                || "::1".equals(remote)) {
+        if (cloudflareIp != null
+                && !cloudflareIp.isBlank()) {
 
-            String forwarded =
-                    request.getHeader(
-                            "X-Forwarded-For"
-                    );
-
-            if (forwarded != null
-                    && !forwarded.isBlank()) {
-
-                return forwarded
-                        .split(",")[0]
-                        .trim();
-            }
+            return cloudflareIp.trim();
         }
 
-        return remote;
+        return request.getRemoteAddr();
     }
 
     private record RateLimitRule(
