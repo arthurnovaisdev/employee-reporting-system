@@ -6,12 +6,14 @@ import com.mbfreire.employee_reporting.dto.request.ReportStatusUpdateRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.*;
 import com.mbfreire.employee_reporting.entity.*;
 import com.mbfreire.employee_reporting.enums.ReportStatus;
+import com.mbfreire.employee_reporting.event.AdminNotificationEvent;
 import com.mbfreire.employee_reporting.exception.BusinessRuleException;
 import com.mbfreire.employee_reporting.exception.AttachmentUnavailableException;
 import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -47,6 +49,7 @@ public class ReportService {
     private final AttachmentRepository attachmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final AttachmentFeatureProperties attachmentFeatureProperties;
+    private final ApplicationEventPublisher eventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Transactional
@@ -70,6 +73,7 @@ public class ReportService {
                 .build();
 
         reportRepository.save(report);
+        eventPublisher.publishEvent(new AdminNotificationEvent(report.getProtocol()));
 
         return new ProtocolResponseDTO(report.getProtocol(), trackingCode);
     }

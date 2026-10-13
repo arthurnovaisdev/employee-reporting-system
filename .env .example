@@ -5,4 +5,6 @@ JWT_SECRET=sua_chave_jwt_super_secreta_aqui
 
 ADMIN_CPF=cpf_do_admin_com_11_digitos
 ADMIN_CONTACT_EMAIL=email_de_contato_do_admin_aqui
+ADMIN_NOTIFICATIONS_ENABLED=false
+ADMIN_NOTIFICATION_EMAIL=email_para_receber_notificacoes_aqui
 ADMIN_INITIAL_PASSWORD=senha_do_admin_aqui

@@ -14,6 +14,7 @@ import com.mbfreire.employee_reporting.repository.StatusHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
@@ -57,7 +58,8 @@ class ReportServiceAttachmentFeatureTest {
                 fileStorageServiceProvider,
                 attachmentRepository,
                 passwordEncoder,
-                properties
+                properties,
+                mock(ApplicationEventPublisher.class)
         );
     }
 

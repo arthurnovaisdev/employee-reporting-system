@@ -120,6 +120,43 @@ public class EmailService {
         restTemplate.postForEntity(apiUrl, request, String.class);
     }
 
+    public void sendNewReportAdminNotification(String toEmail, String protocol) {
+        String safeProtocol = HtmlUtils.htmlEscape(protocol);
+        String htmlContent = """
+                <html>
+                    <body>
+                        <h2>Nova denúncia recebida</h2>
+                        <p>Uma nova denúncia foi registrada na Ouvidoria Interna.</p>
+                        <p>Protocolo: <b>%s</b></p>
+                        <p>Acesse o painel administrativo para consultar os detalhes.</p>
+                    </body>
+                </html>
+                """.formatted(safeProtocol);
+        String textContent = """
+                Nova denúncia recebida.
+
+                Uma nova denúncia foi registrada na Ouvidoria Interna.
+                Protocolo: %s
+
+                Acesse o painel administrativo para consultar os detalhes.
+                """.formatted(protocol);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("api-key", apiKey);
+        headers.set("accept", "application/json");
+
+        Map<String, Object> body = Map.of(
+                "sender", Map.of("name", senderName, "email", senderEmail),
+                "to", List.of(Map.of("email", toEmail, "name", "Administrador")),
+                "subject", "Nova denúncia - " + protocol,
+                "htmlContent", htmlContent,
+                "textContent", textContent
+        );
+
+        restTemplate.postForEntity(apiUrl, new HttpEntity<>(body, headers), String.class);
+    }
+
     private String buildPasswordResetLink(String resetToken) {
         if (frontendBaseUrl == null || frontendBaseUrl.isBlank()) {
             throw new IllegalStateException("A URL do frontend não foi configurada.");
