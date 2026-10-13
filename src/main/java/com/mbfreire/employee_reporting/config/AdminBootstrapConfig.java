@@ -3,6 +3,9 @@ package com.mbfreire.employee_reporting.config;
 import com.mbfreire.employee_reporting.entity.User;
 import com.mbfreire.employee_reporting.enums.Role;
 import com.mbfreire.employee_reporting.repository.UserRepository;
+import jakarta.validation.Validator;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -10,6 +13,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.util.Locale;
 
 @Configuration
 @Profile("bootstrap-admin")
@@ -22,12 +27,15 @@ public class AdminBootstrapConfig {
     CommandLineRunner createInitialAdmin(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
+            Validator validator,
             @Value("${admin.bootstrap.cpf}") String adminCpf,
-            @Value("${admin.bootstrap.password}") String adminPassword
+            @Value("${admin.bootstrap.password}") String adminPassword,
+            @Value("${admin.bootstrap.contact-email:}") String adminContactEmail
     ) {
         return args -> {
             validateCpf(adminCpf);
             validatePassword(adminPassword);
+            String contactEmail = normalizeContactEmail(adminContactEmail, validator);
 
             var existingUser = userRepository.findByCpf(adminCpf);
 
@@ -37,23 +45,42 @@ public class AdminBootstrapConfig {
                     throw new IllegalStateException("O CPF configurado para bootstrap já pertence a um usuário que não é ADMIN.");
                 }
 
-            log.info("Bootstrap administrativo ignorado: a conta administrativa já existe.");
+                if (contactEmail != null && (user.getContactEmail() == null || user.getContactEmail().isBlank())) {
+                    user.setContactEmail(contactEmail);
+                    userRepository.save(user);
+                    log.info("E-mail de contato da conta administrativa inicial atualizado.");
+                } else {
+                    log.info("Bootstrap administrativo ignorado: a conta administrativa já existe.");
+                }
+                return;
+            }
 
-        return;
+            User admin = User.builder()
+                    .name("Administrador")
+                    .cpf(adminCpf)
+                    .contactEmail(contactEmail)
+                    .passwordHash(passwordEncoder.encode(adminPassword))
+                    .role(Role.ADMIN)
+                    .build();
 
+            userRepository.save(admin);
+            log.info("Conta administrativa inicial criada com sucesso.");
+        };
     }
 
-        User admin = User.builder()
-                .name("Administrador")
-                .cpf(adminCpf)
-                .passwordHash(passwordEncoder.encode(adminPassword))
-                .role(Role.ADMIN)
-                .build();
+    private String normalizeContactEmail(String contactEmail, Validator validator) {
+        if (contactEmail == null || contactEmail.isBlank()) {
+            return null;
+        }
 
-        userRepository.save(admin);
-        log.info("Conta administrativa inicial criada com sucesso.");
-    };
-}
+        String normalized = contactEmail.trim().toLowerCase(Locale.ROOT);
+        if (!validator.validate(new ContactEmailCandidate(normalized)).isEmpty()) {
+            throw new IllegalStateException("ADMIN_CONTACT_EMAIL deve ser um e-mail válido com no máximo 150 caracteres.");
+        }
+        return normalized;
+    }
+
+    private record ContactEmailCandidate(@Email @Size(max = 150) String value) {}
 
     private void validateCpf(String cpf) {
     if (cpf == null || !cpf.matches("\\d{11}")) {

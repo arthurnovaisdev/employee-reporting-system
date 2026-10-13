@@ -35,6 +35,21 @@ O projeto foi desenvolvido considerando boas práticas de segurança, privacidad
 - Alteração e recuperação de senha
 - Envio de e-mails transacionais
 
+## E-mail de contato do administrador inicial
+
+Ao iniciar a API com o perfil `bootstrap-admin`, configure `ADMIN_CPF`,
+`ADMIN_INITIAL_PASSWORD` e `ADMIN_CONTACT_EMAIL` no ambiente. O bootstrap cria
+o administrador com esse e-mail quando o banco está vazio. Se a conta
+administrativa do mesmo CPF já existir e estiver sem e-mail de contato, o
+bootstrap preenche somente esse campo, sem alterar a senha. Um e-mail já
+cadastrado não é substituído.
+
+O perfil precisa estar ativo na inicialização em que o bootstrap deve rodar
+(por exemplo, `SPRING_PROFILES_ACTIVE=prod,bootstrap-admin`). Depois da
+inicialização, a recuperação de senha existente pode ser solicitada pelo CPF
+na tela de login. O valor de `ADMIN_CONTACT_EMAIL` deve ser um endereço válido
+controlado pelo responsável pela conta; não coloque o endereço real no código.
+
 ## Autor
 
 Arthur Novais Peixoto
