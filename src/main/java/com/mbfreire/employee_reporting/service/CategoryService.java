@@ -4,12 +4,15 @@ import com.mbfreire.employee_reporting.dto.request.CategoryRequestDTO;
 import com.mbfreire.employee_reporting.dto.response.CategoryResponseDTO;
 import com.mbfreire.employee_reporting.entity.Category;
 import com.mbfreire.employee_reporting.exception.BusinessRuleException;
+import com.mbfreire.employee_reporting.exception.ResourceNotFoundException;
 import com.mbfreire.employee_reporting.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -39,5 +42,22 @@ public class CategoryService {
     public Page<CategoryResponseDTO> findAll(Pageable pageable) {
         return categoryRepository.findByActiveTrue(pageable)
                 .map(cat -> new CategoryResponseDTO(cat.getId(), cat.getName(), cat.isActive()));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CategoryResponseDTO> findAllForAdmin(Pageable pageable) {
+        return categoryRepository.findAll(pageable)
+                .map(cat -> new CategoryResponseDTO(cat.getId(), cat.getName(), cat.isActive()));
+    }
+
+    @Transactional
+    public void deactivate(UUID id) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria não encontrada."));
+        if (!category.isActive()) {
+            return;
+        }
+        category.setActive(false);
+        categoryRepository.save(category);
     }
 }

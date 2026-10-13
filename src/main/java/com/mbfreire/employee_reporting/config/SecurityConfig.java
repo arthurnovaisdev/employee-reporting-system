@@ -153,8 +153,18 @@ public class SecurityConfig {
                         )
 
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/categories/admin"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/categories"
+                        ).hasRole("ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/api/categories/*/deactivate"
                         ).hasRole("ADMIN")
 
                         // DENY BY DEFAULT
